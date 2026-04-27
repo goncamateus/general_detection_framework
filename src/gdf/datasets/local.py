@@ -21,12 +21,16 @@ class LocalDatasetSource(BaseDatasetSource):
             return False
         train = self._path / "train"
         val = self._path / "val"
+        if not val.is_dir():
+            val = self._path / "valid"
         if not train.is_dir() or not val.is_dir():
-            log.warning(f"Expected train/ and val/ dirs in {self._path}")
+            log.warning(f"Expected train/ and val/ (or valid/) dirs in {self._path}")
             return False
+        # Check for class folders (cls) or images/ subdir (detect)
         train_classes = [d for d in train.iterdir() if d.is_dir()]
-        if not train_classes:
-            log.warning(f"No class folders found in {train}")
+        has_images_subdir = (train / "images").is_dir()
+        if not train_classes and not has_images_subdir:
+            log.warning(f"No class folders or images/ found in {train}")
             return False
-        log.info(f"Found {len(train_classes)} classes in train/")
+        log.info(f"Dataset validated: {self._path}")
         return True

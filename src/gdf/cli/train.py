@@ -80,7 +80,15 @@ def train_cmd(
     if cfg.use_wandb:
         loggers.append(WandbLogger(project=cfg.project_name, config=cfg.model_dump()))
 
-    model = YOLOClsWrapper(version=cfg.model_version, size=cfg.model_size)
+    # Auto-detect task: data.yaml → detect, ImageFolder → cls
+    is_detect = (data_root / "data.yaml").exists()
+    if is_detect:
+        from gdf.models.yolo_detect import YOLODetectWrapper
+        model = YOLODetectWrapper(version=cfg.model_version, size=cfg.model_size)
+        console.print("[cyan]Detected detection dataset (data.yaml found)[/cyan]")
+    else:
+        model = YOLOClsWrapper(version=cfg.model_version, size=cfg.model_size)
+        console.print("[cyan]Detected classification dataset (ImageFolder)[/cyan]")
     trainer = Trainer(
         model=model,
         data_path=data_root,

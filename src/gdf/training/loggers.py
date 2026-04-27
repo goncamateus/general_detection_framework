@@ -58,7 +58,7 @@ class WandbLogger(BaseLogger):
     def log_params(self, params: dict[str, Any]) -> None:
         import wandb
 
-        wandb.config.update(params)
+        wandb.config.update(params, allow_val_change=True)
 
     def finish(self) -> None:
         import wandb

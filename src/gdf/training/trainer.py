@@ -57,8 +57,12 @@ class Trainer:
         log.info(f"Starting training: {self.model.model_name} for {self.epochs} epochs")
         log.info(f"Data: {self.data_path}, Output: {self.output_dir}")
 
+        # Use data.yaml if available (detection datasets), else directory path (classification)
+        data_yaml = self.data_path / "data.yaml"
+        data_arg = str(data_yaml) if data_yaml.exists() else str(self.data_path)
+
         results = self.model.train(
-            data=str(self.data_path),
+            data=data_arg,
             epochs=self.epochs,
             batch=self.batch_size,
             imgsz=self.imgsz,
