@@ -97,6 +97,7 @@ class WebcamRunner:
             writer = cv2.VideoWriter(str(output_path), fourcc, fps, (w, h))
 
         frame_idx = 0
+        avg_fps = 0
         colors: dict[int, tuple[int, int, int]] = {}
         fps_history: list[float] = []
 
