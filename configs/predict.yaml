@@ -1,0 +1,9 @@
+# GDF Predict Configuration
+# Usage: gdf predict --config configs/predict.yaml
+
+weights: runs/export/model.onnx
+source: data/test_images
+backend: onnx
+conf_threshold: 0.5
+imgsz: 224
+device: auto

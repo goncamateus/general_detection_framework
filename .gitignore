@@ -1,0 +1,36 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+.env
+
+# Model weights & exports
+*.pt
+*.onnx
+*.engine
+
+# Training artifacts
+runs/
+data/
+wandb/
+tensorboard_logs/
+
+# Graphify output
+graphify-out/
+
+# Tool caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.opencode/
+
+# OS
+.DS_Store
+Thumbs.db

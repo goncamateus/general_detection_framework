@@ -1,0 +1,27 @@
+# GDF Training Configuration
+# Usage: gdf train --config configs/default.yaml
+
+model_version: v26
+model_size: n
+source: local
+data_path: data/my_dataset
+epochs: 100
+batch_size: 16
+imgsz: 224
+lr: 0.001
+output_dir: runs/train
+project_name: gdf-exp
+use_wandb: true
+use_tensorboard: true
+workers: 8
+patience: 50
+device: auto
+
+# For Roboflow:
+# source: roboflow
+# data_path: workspace/project/1
+# Requires ROBOFLOW_API_KEY env var
+
+# For HTTP download:
+# source: http
+# data_path: https://example.com/dataset.zip

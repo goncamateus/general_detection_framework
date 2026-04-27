@@ -1,0 +1,64 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gdf"
+version = "0.1.0"
+description = "General Detection Framework — YOLO classification stack with ONNX/TensorRT deployment"
+requires-python = ">=3.10"
+license = "MIT"
+dependencies = [
+    "ultralytics>=8.4",
+    "torch>=2.0",
+    "torchvision",
+    "onnxruntime",
+    "onnx",
+    "typer[all]>=0.9",
+    "rich>=13.0",
+    "pydantic>=2.0",
+    "pyyaml>=6.0",
+    "roboflow>=1.1",
+    "requests",
+    "tqdm",
+    "Pillow",
+    "scikit-learn",
+    "tensorboard",
+    "wandb",
+    "numpy",
+]
+
+[project.optional-dependencies]
+trt = ["tensorrt>=8.6"]
+gpu = ["onnxruntime-gpu"]
+jetson = ["tensorrt>=8.6", "jetson-stats"]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "ruff",
+    "mypy",
+]
+
+[project.scripts]
+gdf = "gdf.cli.app:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gdf"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"

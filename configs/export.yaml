@@ -1,0 +1,10 @@
+# GDF Export Configuration
+# Usage: gdf export --config configs/export.yaml
+
+weights: runs/train/gdf-exp/weights/best.pt
+format: both
+half: false
+workspace: 4096
+imgsz: 224
+device: auto
+output_dir: runs/export

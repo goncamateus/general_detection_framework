@@ -1,0 +1,24 @@
+FROM nvcr.io/nvidia/l4t-tensorrt:r8.5.2-runtime
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3-pip \
+    python3-dev \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY pyproject.toml .
+RUN pip3 install --no-cache-dir -e ".[jetson]" || pip3 install --no-cache-dir -e .
+
+COPY src/ src/
+COPY configs/ configs/
+COPY Dockerfile.jetson .
+
+ENV PYTHONPATH=/app/src
+
+ENTRYPOINT ["python3", "-m", "gdf.cli.app"]
+CMD ["info"]
