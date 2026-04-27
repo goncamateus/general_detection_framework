@@ -42,3 +42,15 @@ class PredictConfig(BaseModel):
     imgsz: int = Field(default=224, ge=32)
     output: Path | None = None
     device: str = "auto"
+
+
+class TrackConfig(BaseModel):
+    weights: Path
+    source: str
+    backend: Literal["pytorch", "onnx", "tensorrt"] = "pytorch"
+    conf_threshold: float = Field(default=0.3, ge=0, le=1)
+    match_threshold: float = Field(default=0.7, ge=0, le=1)
+    max_time_lost: int = Field(default=30, ge=1)
+    imgsz: int = Field(default=640, ge=32)
+    output: Path | None = None
+    device: str = "auto"

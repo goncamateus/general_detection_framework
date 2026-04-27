@@ -24,15 +24,41 @@ YOLO_MODELS: dict[str, dict[str, str]] = {
     },
 }
 
+YOLO_DETECT_MODELS: dict[str, dict[str, str]] = {
+    "v8": {
+        "n": "yolov8n.pt",
+        "s": "yolov8s.pt",
+        "m": "yolov8m.pt",
+        "l": "yolov8l.pt",
+        "x": "yolov8x.pt",
+    },
+    "v11": {
+        "n": "yolo11n.pt",
+        "s": "yolo11s.pt",
+        "m": "yolo11m.pt",
+        "l": "yolo11l.pt",
+        "x": "yolo11x.pt",
+    },
+    "v26": {
+        "n": "yolo26n.pt",
+        "s": "yolo26s.pt",
+        "m": "yolo26m.pt",
+        "l": "yolo26l.pt",
+        "x": "yolo26x.pt",
+    },
+}
 
-def get_model_name(version: str, size: str) -> str:
-    if version not in YOLO_MODELS:
-        raise ValueError(f"Unknown model version: {version}. Available: {list(YOLO_MODELS)}")
-    sizes = YOLO_MODELS[version]
+
+def get_model_name(version: str, size: str, task: str = "cls") -> str:
+    registry = YOLO_DETECT_MODELS if task == "detect" else YOLO_MODELS
+    if version not in registry:
+        raise ValueError(f"Unknown model version: {version}. Available: {list(registry)}")
+    sizes = registry[version]
     if size not in sizes:
         raise ValueError(f"Unknown model size: {size}. Available: {list(sizes)}")
     return sizes[size]
 
 
-def list_available_models() -> dict[str, list[str]]:
-    return {v: list(sizes.keys()) for v, sizes in YOLO_MODELS.items()}
+def list_available_models(task: str = "cls") -> dict[str, list[str]]:
+    registry = YOLO_DETECT_MODELS if task == "detect" else YOLO_MODELS
+    return {v: list(sizes.keys()) for v, sizes in registry.items()}

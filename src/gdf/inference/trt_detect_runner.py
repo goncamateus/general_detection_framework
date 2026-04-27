@@ -1,0 +1,235 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import cv2
+import numpy as np
+
+from gdf.inference.tracker import ByteTracker, ByteTrackResult
+from gdf.utils.logging import log
+
+
+class TRTDetectRunner:
+    """TensorRT runner for YOLO detection models with tracking."""
+
+    def __init__(self, engine_path: Path, imgsz: int = 640) -> None:
+        import tensorrt as trt
+
+        self.trt = trt
+        self.logger = trt.Logger(trt.Logger.WARNING)
+        self.runtime = trt.Runtime(self.logger)
+
+        with open(engine_path, "rb") as f:
+            self.engine = self.runtime.deserialize_cuda_engine(f.read())
+
+        self.context = self.engine.create_execution_context()
+        self.imgsz = imgsz
+
+        import pycuda.driver as cuda
+        import pycuda.autoinit  # noqa: F401
+
+        self.cuda = cuda
+        self.tracker: ByteTracker | None = None
+
+    def enable_tracking(
+        self,
+        conf_threshold: float = 0.3,
+        match_threshold: float = 0.7,
+        max_time_lost: int = 30,
+    ) -> None:
+        self.tracker = ByteTracker(
+            conf_threshold=conf_threshold,
+            match_threshold=match_threshold,
+            max_time_lost=max_time_lost,
+        )
+
+    def _preprocess(self, img: np.ndarray) -> tuple[np.ndarray, float, tuple[int, int]]:
+        h, w = img.shape[:2]
+        scale = min(self.imgsz / h, self.imgsz / w)
+        new_h, new_w = int(h * scale), int(w * scale)
+
+        resized = cv2.resize(img, (new_w, new_h))
+
+        padded = np.full((self.imgsz, self.imgsz, 3), 114, dtype=np.uint8)
+        pad_h, pad_w = (self.imgsz - new_h) // 2, (self.imgsz - new_w) // 2
+        padded[pad_h : pad_h + new_h, pad_w : pad_w + new_w] = resized
+
+        blob = padded.astype(np.float32) / 255.0
+        blob = blob.transpose(2, 0, 1)[np.newaxis]
+
+        return blob, scale, (pad_h, pad_w)
+
+    def _postprocess(
+        self,
+        output: np.ndarray,
+        scale: float,
+        pad: tuple[int, int],
+        conf_threshold: float,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        pred = output[0]
+
+        if pred.shape[0] < pred.shape[1]:
+            pred = pred.T
+
+        boxes_xywh = pred[:, :4]
+        class_scores = pred[:, 4:]
+
+        max_scores = class_scores.max(axis=1)
+        class_ids = class_scores.argmax(axis=1)
+
+        mask = max_scores > conf_threshold
+        boxes_xywh = boxes_xywh[mask]
+        max_scores = max_scores[mask]
+        class_ids = class_ids[mask]
+
+        if len(boxes_xywh) == 0:
+            return np.empty((0, 4), dtype=np.float32), np.array([], dtype=np.int32), np.array([], dtype=np.float32)
+
+        boxes_xyxy = np.zeros_like(boxes_xywh)
+        boxes_xyxy[:, 0] = boxes_xywh[:, 0] - boxes_xywh[:, 2] / 2
+        boxes_xyxy[:, 1] = boxes_xywh[:, 1] - boxes_xywh[:, 3] / 2
+        boxes_xyxy[:, 2] = boxes_xywh[:, 0] + boxes_xywh[:, 2] / 2
+        boxes_xyxy[:, 3] = boxes_xywh[:, 1] + boxes_xywh[:, 3] / 2
+
+        pad_h, pad_w = pad
+        boxes_xyxy[:, [0, 2]] -= pad_w
+        boxes_xyxy[:, [1, 3]] -= pad_h
+        boxes_xyxy /= scale
+
+        keep = self._nms(boxes_xyxy, max_scores, iou_threshold=0.5)
+        return boxes_xyxy[keep], class_ids[keep], max_scores[keep]
+
+    @staticmethod
+    def _nms(boxes: np.ndarray, scores: np.ndarray, iou_threshold: float) -> np.ndarray:
+        x1 = boxes[:, 0]
+        y1 = boxes[:, 1]
+        x2 = boxes[:, 2]
+        y2 = boxes[:, 3]
+        areas = (x2 - x1) * (y2 - y1)
+
+        order = scores.argsort()[::-1]
+        keep = []
+
+        while order.size > 0:
+            i = order[0]
+            keep.append(i)
+            if order.size == 1:
+                break
+
+            xx1 = np.maximum(x1[i], x1[order[1:]])
+            yy1 = np.maximum(y1[i], y1[order[1:]])
+            xx2 = np.minimum(x2[i], x2[order[1:]])
+            yy2 = np.minimum(y2[i], y2[order[1:]])
+
+            inter = np.maximum(0, xx2 - xx1) * np.maximum(0, yy2 - yy1)
+            iou = inter / np.maximum(areas[i] + areas[order[1:]] - inter, 1e-6)
+
+            inds = np.where(iou <= iou_threshold)[0]
+            order = order[inds + 1]
+
+        return np.array(keep)
+
+    def _run_inference(self, blob: np.ndarray) -> np.ndarray:
+        input_data = blob.astype(np.float32)
+        output_shape = (1, 84, 8400)
+        output = np.empty(output_shape, dtype=np.float32)
+
+        d_input = self.cuda.mem_alloc(input_data.nbytes)
+        d_output = self.cuda.mem_alloc(output.nbytes)
+
+        self.cuda.memcpy_htod(d_input, input_data)
+        self.context.execute_v2(bindings=[int(d_input), int(d_output)])
+        self.cuda.memcpy_dtoh(output, d_output)
+
+        d_input.free()
+        d_output.free()
+
+        return output
+
+    def detect(
+        self,
+        image: str | Path,
+        conf_threshold: float = 0.25,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        img = cv2.imread(str(image))
+        if img is None:
+            raise FileNotFoundError(f"Cannot read image: {image}")
+
+        blob, scale, pad = self._preprocess(img)
+        output = self._run_inference(blob)
+        return self._postprocess(output, scale, pad, conf_threshold)
+
+    def detect_and_track(
+        self,
+        image: str | Path,
+        conf_threshold: float = 0.25,
+    ) -> ByteTrackResult:
+        if self.tracker is None:
+            self.enable_tracking(conf_threshold=conf_threshold)
+
+        bboxes, class_ids, scores = self.detect(image, conf_threshold)
+        return self.tracker.update(bboxes, scores, class_ids)
+
+    def detect_video(
+        self,
+        video_path: str | Path,
+        conf_threshold: float = 0.25,
+        output_path: str | Path | None = None,
+    ) -> list[ByteTrackResult]:
+        if self.tracker is None:
+            self.enable_tracking(conf_threshold=conf_threshold)
+
+        cap = cv2.VideoCapture(str(video_path))
+        if not cap.isOpened():
+            raise FileNotFoundError(f"Cannot open video: {video_path}")
+
+        writer = None
+        if output_path:
+            fps = cap.get(cv2.CAP_PROP_FPS) or 30
+            w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            writer = cv2.VideoWriter(str(output_path), fourcc, fps, (w, h))
+
+        results = []
+        frame_idx = 0
+        colors = {}
+
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            blob, scale, pad = self._preprocess(frame)
+            output = self._run_inference(blob)
+            bboxes, class_ids, scores = self._postprocess(output, scale, pad, conf_threshold)
+            tracks = self.tracker.update(bboxes, scores, class_ids)
+            results.append(tracks)
+
+            if writer:
+                for i in range(len(tracks)):
+                    tid = int(tracks.track_ids[i])
+                    if tid not in colors:
+                        colors[tid] = (
+                            int(np.random.randint(0, 255)),
+                            int(np.random.randint(0, 255)),
+                            int(np.random.randint(0, 255)),
+                        )
+                    color = colors[tid]
+                    x1, y1, x2, y2 = tracks.bboxes[i].astype(int)
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                    label = f"ID:{tid} {int(tracks.class_ids[i])} {tracks.scores[i]:.2f}"
+                    cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
+                writer.write(frame)
+
+            frame_idx += 1
+            if frame_idx % 100 == 0:
+                log.info(f"Processed {frame_idx} frames, {len(tracks)} tracks")
+
+        cap.release()
+        if writer:
+            writer.release()
+            log.info(f"Output saved: {output_path}")
+
+        return results

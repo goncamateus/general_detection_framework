@@ -26,6 +26,8 @@ dependencies = [
     "tensorboard",
     "wandb",
     "numpy",
+    "opencv-python",
+    "scipy",
 ]
 
 [project.optional-dependencies]

@@ -2,7 +2,7 @@
 
 Welcome to the **General Detection Framework** documentation.
 
-GDF is a modular Python CLI for training YOLO image classification models, exporting them to ONNX/TensorRT, and deploying to NVIDIA Jetson devices.
+GDF is a modular Python CLI for training YOLO image classification and detection models, exporting them to ONNX/TensorRT, deploying to NVIDIA Jetson, and tracking objects across video frames.
 
 ## Getting Started
 
@@ -13,7 +13,8 @@ GDF is a modular Python CLI for training YOLO image classification models, expor
 ## Guides
 
 - [Training](Training.md) — train YOLO-cls models, logging, callbacks
-- Export & Deployment](Export-and-Deployment.md) — ONNX, TensorRT, Jetson SSH deploy
+- [Export & Deployment](Export-and-Deployment.md) — ONNX, TensorRT, Jetson SSH deploy
+- [Tracking](Tracking.md) — ByteTrack object tracking with ONNX/TensorRT
 - [CLI Reference](CLI-Reference.md) — all commands and flags
 
 ## Quick Links

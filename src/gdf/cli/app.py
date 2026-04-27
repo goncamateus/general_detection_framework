@@ -31,9 +31,11 @@ def main(
 from gdf.cli.train import train_cmd  # noqa: E402
 from gdf.cli.export import export_cmd  # noqa: E402
 from gdf.cli.predict import predict_cmd  # noqa: E402
+from gdf.cli.track import track_cmd  # noqa: E402
 from gdf.cli.info import info_cmd  # noqa: E402
 
 app.command(name="train")(train_cmd)
 app.command(name="export")(export_cmd)
 app.command(name="predict")(predict_cmd)
+app.command(name="track")(track_cmd)
 app.command(name="info")(info_cmd)

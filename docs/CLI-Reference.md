@@ -119,3 +119,41 @@ gdf predict --weights model.engine --source data/test/ --backend tensorrt --outp
 # With class names file
 gdf predict --weights model.onnx --source img.jpg --class-names classes.txt
 ```
+
+## gdf track
+
+Multi-object tracking on video or image sequences. Uses ByteTrack with detection models.
+
+```bash
+gdf track [OPTIONS]
+```
+
+| Flag | Short | Type | Default | Description |
+|------|-------|------|---------|-------------|
+| `--config` | `-c` | Path | — | YAML config file |
+| `--weights` | `-w` | Path | required | Detection model weights |
+| `--source` | `-s` | str | required | Video file or image directory |
+| `--backend` | `-b` | str | `pytorch` | `pytorch`, `onnx`, `tensorrt` |
+| `--conf-threshold` | | float | `0.3` | Detection confidence |
+| `--match-threshold` | | float | `0.7` | IoU match threshold |
+| `--max-time-lost` | | int | `30` | Frames before track removal |
+| `--imgsz` | | int | `640` | Input image size |
+| `--output` | `-o` | Path | auto | Output video or CSV path |
+| `--device` | | str | `auto` | Device |
+| `--class-names` | | Path | — | File with class names |
+
+**Examples:**
+
+```bash
+# Track objects in video (ONNX)
+gdf track --weights model.onnx --source video.mp4 --backend onnx --output tracked.mp4
+
+# Track objects in video (TensorRT)
+gdf track --weights model.engine --source video.mp4 --backend tensorrt --half
+
+# Track frames in directory
+gdf track --weights model.onnx --source frames/ --backend onnx --output results.csv
+
+# PyTorch (uses Ultralytics built-in tracker)
+gdf track --weights yolov8n.pt --source video.mp4 --backend pytorch
+```
