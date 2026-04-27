@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import platform
+import sys
 from pathlib import Path
 from typing import Literal
 
@@ -8,6 +10,8 @@ import numpy as np
 
 from gdf.inference.tracker import ByteTracker
 from gdf.utils.logging import log
+
+IS_WINDOWS = platform.system() == "Windows"
 
 
 class WebcamRunner:
@@ -59,6 +63,14 @@ class WebcamRunner:
             match_threshold=self.match_threshold,
         )
 
+    def _open_capture(self, device: int) -> cv2.VideoCapture:
+        """Open webcam with platform-appropriate backend."""
+        if IS_WINDOWS:
+            cap = cv2.VideoCapture(device, cv2.CAP_DSHOW)
+        else:
+            cap = cv2.VideoCapture(device)
+        return cap
+
     def run(
         self,
         output_path: str | Path | None = None,
@@ -78,7 +90,7 @@ class WebcamRunner:
         if self._runner is None:
             self._init_runner()
 
-        cap = cv2.VideoCapture(self.device)
+        cap = self._open_capture(self.device)
         if not cap.isOpened():
             raise RuntimeError(f"Cannot open webcam device {self.device}")
 
@@ -97,9 +109,14 @@ class WebcamRunner:
             writer = cv2.VideoWriter(str(output_path), fourcc, fps, (w, h))
 
         frame_idx = 0
-        avg_fps = 0
+        avg_fps = 0.0
         colors: dict[int, tuple[int, int, int]] = {}
         fps_history: list[float] = []
+        win_name = "GDF Tracking"
+
+        if show:
+            cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
+            cv2.resizeWindow(win_name, w, h)
 
         try:
             while True:
@@ -163,10 +180,12 @@ class WebcamRunner:
                     writer.write(display)
 
                 if show:
-                    cv2.imshow("GDF Tracking", display)
-                    key = cv2.waitKey(1) & 0xFF
-                    if key == ord("q"):
-                        log.info("User pressed 'q', stopping")
+                    cv2.imshow(win_name, display)
+                    # waitKeyEx needed on Windows for proper key detection
+                    key = cv2.waitKeyEx(1)
+                    # Check for 'q' (lowercase 0x71, uppercase 0x51) or ESC (0x1B)
+                    if key in (ord("q"), ord("Q"), 0x1B):
+                        log.info("User quit")
                         break
 
                 frame_idx += 1
@@ -180,6 +199,7 @@ class WebcamRunner:
                 log.info(f"Output saved: {output_path}")
             if show:
                 cv2.destroyAllWindows()
+                cv2.waitKey(1)
 
         log.info(f"Processed {frame_idx} frames, avg FPS: {avg_fps:.0f}")
         return frame_idx
