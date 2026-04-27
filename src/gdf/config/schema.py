@@ -38,6 +38,7 @@ class PredictConfig(BaseModel):
     weights: Path
     source: str
     backend: Literal["pytorch", "onnx", "tensorrt"] = "pytorch"
+    task: Literal["cls", "detect"] = "cls"
     conf_threshold: float = Field(default=0.5, ge=0, le=1)
     imgsz: int = Field(default=224, ge=32)
     output: Path | None = None

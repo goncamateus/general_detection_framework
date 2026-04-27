@@ -84,10 +84,12 @@ class KalmanFilter:
     ) -> tuple[np.ndarray, np.ndarray]:
         projected_mean, projected_cov = self.project(mean, covariance)
 
-        chol_factor, lower = np.linalg.cho_factor(projected_cov, lower=True)
-        kalman_gain = np.linalg.cho_solve(
-            (chol_factor, lower), covariance @ self._update_mat.T
-        ).T
+        from scipy.linalg import cho_factor, cho_solve
+
+        chol_factor, lower = cho_factor(projected_cov, lower=True)
+        # Solve projected_cov @ K^T = (cov @ H^T)^T for K^T, then transpose
+        B = covariance @ self._update_mat.T  # (8, 4)
+        kalman_gain = cho_solve((chol_factor, lower), B.T).T  # (8, 4)
 
         innovation = measurement - projected_mean
         new_mean = mean + innovation @ kalman_gain.T
