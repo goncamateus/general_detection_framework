@@ -178,8 +178,9 @@ class UnifiedPredictor:
         image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
         results = []
 
-        for img_path in sorted(dir_path.iterdir()):
-            if img_path.suffix.lower() in image_extensions:
+        # Recurse into subdirectories (ImageFolder layout)
+        for img_path in sorted(dir_path.rglob("*")):
+            if img_path.is_file() and img_path.suffix.lower() in image_extensions:
                 pred = self.predict(img_path)
                 results.append((img_path, pred))
 

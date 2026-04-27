@@ -25,11 +25,14 @@ class YOLOClsWrapper:
         self.model = YOLO(str(weights_path))
         return self.model
 
-    def train(self, data_path: str | Path, **kwargs) -> object:  # type: ignore[no-untyped-def]
+    def train(self, data_path: str | Path | None = None, **kwargs) -> object:  # type: ignore[no-untyped-def]
         if self.model is None:
             self.load()
-        log.info(f"Training {self.model_name} on {data_path}")
-        return self.model.train(data=str(data_path), **kwargs)  # type: ignore[union-attr]
+        path = data_path or kwargs.get("data")
+        log.info(f"Training {self.model_name} on {path}")
+        if data_path is not None:
+            kwargs["data"] = str(data_path)
+        return self.model.train(**kwargs)  # type: ignore[union-attr]
 
     def export(self, format: str = "onnx", **kwargs) -> str:
         if self.model is None:
