@@ -26,7 +26,8 @@ dependencies = [
     "tensorboard",
     "wandb",
     "numpy",
-    "opencv-python",
+    "opencv-contrib-python",
+    "opencv-python-headless",
     "scipy",
 ]
 

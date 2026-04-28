@@ -51,9 +51,11 @@ class WebcamRunner:
     def _init_runner(self) -> None:
         if self.backend == "onnx":
             from gdf.inference.onnx_detect_runner import ONNXDetectRunner
+
             self._runner = ONNXDetectRunner(self.weights, self.imgsz)
         elif self.backend == "tensorrt":
             from gdf.inference.trt_detect_runner import TRTDetectRunner
+
             self._runner = TRTDetectRunner(self.weights, self.imgsz)
         else:
             raise ValueError(f"Unsupported backend: {self.backend}")
@@ -136,7 +138,10 @@ class WebcamRunner:
                 else:
                     raw_output = self._runner._run_inference(blob)
 
-                bboxes, class_ids, scores = self._runner._postprocess(raw_output, scale, pad, self.conf_threshold)
+                bboxes, class_ids, scores = self._runner._postprocess(
+                    raw_output, scale, pad, self.conf_threshold
+                )
+
                 tracks = self._runner.tracker.update(bboxes, scores, class_ids)
 
                 t_end = cv2.getTickCount()
@@ -164,17 +169,29 @@ class WebcamRunner:
                     x1, y1, x2, y2 = tracks.bboxes[i].astype(int)
                     cv2.rectangle(display, (x1, y1), (x2, y2), color, 2)
 
-                    cls_name = self.class_names[cls_id] if cls_id < len(self.class_names) else str(cls_id)
+                    cls_name = (
+                        self.class_names[cls_id] if cls_id < len(self.class_names) else str(cls_id)
+                    )
                     label = f"ID:{tid} {cls_name} {conf:.2f}"
 
                     (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 1)
                     cv2.rectangle(display, (x1, y1 - th - 8), (x1 + tw + 4, y1), color, -1)
-                    cv2.putText(display, label, (x1 + 2, y1 - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+                    cv2.putText(
+                        display,
+                        label,
+                        (x1 + 2, y1 - 4),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.6,
+                        (255, 255, 255),
+                        1,
+                    )
 
                 # FPS overlay
                 avg_fps = sum(fps_history) / len(fps_history) if fps_history else 0
                 fps_text = f"FPS: {avg_fps:.0f} | Tracks: {len(tracks)} | Infer: {infer_ms:.0f}ms"
-                cv2.putText(display, fps_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+                cv2.putText(
+                    display, fps_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2
+                )
 
                 if writer:
                     writer.write(display)

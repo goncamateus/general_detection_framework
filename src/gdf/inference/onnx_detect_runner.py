@@ -20,6 +20,11 @@ class ONNXDetectRunner:
 
         self.session = ort.InferenceSession(str(model_path), providers=providers)
         self.input_name = self.session.get_inputs()[0].name
+        if self.session.get_inputs()[0].shape[2] != imgsz:
+            real_size = self.session.get_inputs()[0].shape[2]
+            log.warning(f"Model input size {real_size} does not match imgsz {imgsz}")
+            log.warning("Transforms will be applied to resize input.")
+            imgsz = self.session.get_inputs()[0].shape[2]
         self.imgsz = imgsz
         self.tracker: ByteTracker | None = None
 
@@ -35,13 +40,17 @@ class ONNXDetectRunner:
             max_time_lost=max_time_lost,
         )
 
-    def _preprocess(self, img: np.ndarray) -> tuple[np.ndarray, float, tuple[int, int]]:
+    def _preprocess(
+        self, img: np.ndarray
+    ) -> tuple[np.ndarray, float, tuple[int, int, int, int, int, int]]:
         h, w = img.shape[:2]
+        # Letterbox: scale to fit within imgsz while preserving aspect ratio
         scale = min(self.imgsz / h, self.imgsz / w)
         new_h, new_w = int(h * scale), int(w * scale)
 
         resized = cv2.resize(img, (new_w, new_h))
 
+        # Pad to square centered
         padded = np.full((self.imgsz, self.imgsz, 3), 114, dtype=np.uint8)
         pad_h, pad_w = (self.imgsz - new_h) // 2, (self.imgsz - new_w) // 2
         padded[pad_h : pad_h + new_h, pad_w : pad_w + new_w] = resized
@@ -49,21 +58,33 @@ class ONNXDetectRunner:
         blob = padded.astype(np.float32) / 255.0
         blob = blob.transpose(2, 0, 1)[np.newaxis]
 
-        return blob, scale, (pad_h, pad_w)
+        # Return: (pad_h, pad_w, new_w, new_h, orig_w, orig_h)
+        return blob, scale, (pad_h, pad_w, new_w, new_h, w, h)
 
     def _postprocess(
         self,
         output: np.ndarray,
         scale: float,
-        pad: tuple[int, int],
+        pad: tuple[int, int, int, int, int, int],
         conf_threshold: float,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Post-process YOLO detection output.
 
+        Args:
+            output: Raw model output
+            scale: Scale factor from letterbox resize
+            pad: (pad_h, pad_w, new_w, new_h, orig_w, orig_h)
+            conf_threshold: Confidence threshold
+            debug: Print raw output for debugging
+
         YOLO output shape: [1, num_classes+4, num_boxes]
-        Format: [cx, cy, w, h, class_scores...]
+        Format: [cx, cy, w, h, class_scores...] OR [x1, y1, x2, y2, score, class_id]
         """
+
         pred = output[0]
+
+        if pred.shape[0] < pred.shape[1]:
+            pred = pred.T
 
         if pred.shape[0] < pred.shape[1]:
             pred = pred.T
@@ -80,22 +101,40 @@ class ONNXDetectRunner:
         class_ids = class_ids[mask]
 
         if len(boxes_xywh) == 0:
-            return np.empty((0, 4), dtype=np.float32), np.array([], dtype=np.int32), np.array([], dtype=np.float32)
+            return (
+                np.empty((0, 4), dtype=np.float32),
+                np.array([], dtype=np.int32),
+                np.array([], dtype=np.float32),
+            )
 
-        # xywh → xyxy
+        # Unpack pad info
+        pad_h, pad_w, new_w, new_h, orig_w, orig_h = pad
         boxes_xyxy = np.zeros_like(boxes_xywh)
+
+        # Convert from center xywh to corner xyxy
         boxes_xyxy[:, 0] = boxes_xywh[:, 0] - boxes_xywh[:, 2] / 2
         boxes_xyxy[:, 1] = boxes_xywh[:, 1] - boxes_xywh[:, 3] / 2
         boxes_xyxy[:, 2] = boxes_xywh[:, 0] + boxes_xywh[:, 2] / 2
         boxes_xyxy[:, 3] = boxes_xywh[:, 1] + boxes_xywh[:, 3] / 2
 
-        # Remove padding
-        pad_h, pad_w = pad
+        # Remove padding offset -> coords in resized image space
         boxes_xyxy[:, [0, 2]] -= pad_w
         boxes_xyxy[:, [1, 3]] -= pad_h
 
-        # Scale back to original
+        # Clip to resized image bounds
+        boxes_xyxy[:, 0] = np.clip(boxes_xyxy[:, 0], 0, new_w)
+        boxes_xyxy[:, 1] = np.clip(boxes_xyxy[:, 1], 0, new_h)
+        boxes_xyxy[:, 2] = np.clip(boxes_xyxy[:, 2], 0, new_w)
+        boxes_xyxy[:, 3] = np.clip(boxes_xyxy[:, 3], 0, new_h)
+
+        # Scale back to original image size
         boxes_xyxy /= scale
+
+        # Clip to original image bounds
+        boxes_xyxy[:, 0] = np.clip(boxes_xyxy[:, 0], 0, orig_w)
+        boxes_xyxy[:, 1] = np.clip(boxes_xyxy[:, 1], 0, orig_h)
+        boxes_xyxy[:, 2] = np.clip(boxes_xyxy[:, 2], 0, orig_w)
+        boxes_xyxy[:, 3] = np.clip(boxes_xyxy[:, 3], 0, orig_h)
 
         # NMS
         keep = self._nms(boxes_xyxy, max_scores, iou_threshold=0.5)
@@ -212,7 +251,9 @@ class ONNXDetectRunner:
                     x1, y1, x2, y2 = tracks.bboxes[i].astype(int)
                     cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
                     label = f"ID:{tid} {int(tracks.class_ids[i])} {tracks.scores[i]:.2f}"
-                    cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                    cv2.putText(
+                        frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2
+                    )
 
                 writer.write(frame)
 

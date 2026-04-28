@@ -14,10 +14,18 @@ console = Console()
 
 def train_cmd(
     config: Optional[Path] = typer.Option(None, "--config", "-c", help="YAML config file"),
-    model_version: Optional[str] = typer.Option(None, "--model-version", "-mv", help="YOLO version: v8, v11, v26"),
-    model_size: Optional[str] = typer.Option(None, "--model-size", "-ms", help="Model size: n, s, m, l, x"),
-    source: Optional[str] = typer.Option(None, "--source", "-s", help="Dataset source: local, roboflow, http"),
-    data_path: Optional[str] = typer.Option(None, "--data-path", "-d", help="Path or URL to dataset"),
+    model_version: Optional[str] = typer.Option(
+        None, "--model-version", "-mv", help="YOLO version: v8, v11, v26"
+    ),
+    model_size: Optional[str] = typer.Option(
+        None, "--model-size", "-ms", help="Model size: n, s, m, l, x"
+    ),
+    source: Optional[str] = typer.Option(
+        None, "--source", "-s", help="Dataset source: local, roboflow, http"
+    ),
+    data_path: Optional[str] = typer.Option(
+        None, "--data-path", "-d", help="Path or URL to dataset"
+    ),
     epochs: Optional[int] = typer.Option(None, "--epochs", "-e", help="Training epochs"),
     batch_size: Optional[int] = typer.Option(None, "--batch-size", "-b", help="Batch size"),
     imgsz: Optional[int] = typer.Option(None, "--imgsz", help="Image size"),
@@ -25,36 +33,41 @@ def train_cmd(
     output_dir: Optional[Path] = typer.Option(None, "--output-dir", "-o", help="Output directory"),
     project_name: Optional[str] = typer.Option(None, "--project-name", "-p", help="Project name"),
     use_wandb: Optional[bool] = typer.Option(None, "--wandb/--no-wandb", help="Enable W&B logging"),
-    use_tensorboard: Optional[bool] = typer.Option(None, "--tensorboard/--no-tensorboard", help="Enable TensorBoard"),
+    use_tensorboard: Optional[bool] = typer.Option(
+        None, "--tensorboard/--no-tensorboard", help="Enable TensorBoard"
+    ),
     patience: Optional[int] = typer.Option(None, "--patience", help="Early stopping patience"),
     workers: Optional[int] = typer.Option(None, "--workers", "-w", help="DataLoader workers"),
     device: Optional[str] = typer.Option(None, "--device", help="Device: auto, cpu, cuda:0"),
 ) -> None:
-    cfg = _load_and_merge(config, {
-        "model_version": model_version,
-        "model_size": model_size,
-        "source": source,
-        "data_path": data_path,
-        "epochs": epochs,
-        "batch_size": batch_size,
-        "imgsz": imgsz,
-        "lr": lr,
-        "output_dir": str(output_dir) if output_dir else None,
-        "project_name": project_name,
-        "use_wandb": use_wandb,
-        "use_tensorboard": use_tensorboard,
-        "patience": patience,
-        "workers": workers,
-        "device": device,
-    })
+    cfg = _load_and_merge(
+        config,
+        {
+            "model_version": model_version,
+            "model_size": model_size,
+            "source": source,
+            "data_path": data_path,
+            "epochs": epochs,
+            "batch_size": batch_size,
+            "imgsz": imgsz,
+            "lr": lr,
+            "output_dir": str(output_dir) if output_dir else None,
+            "project_name": project_name,
+            "use_wandb": use_wandb,
+            "use_tensorboard": use_tensorboard,
+            "patience": patience,
+            "workers": workers,
+            "device": device,
+        },
+    )
 
     _print_config(cfg)
 
+    from gdf.datasets.http import HttpDatasetSource
     from gdf.datasets.local import LocalDatasetSource
     from gdf.datasets.roboflow import RoboflowDatasetSource
-    from gdf.datasets.http import HttpDatasetSource
     from gdf.models.yolo_cls import YOLOClsWrapper
-    from gdf.training.loggers import TBLogger, WandbLogger, CompositeLogger
+    from gdf.training.loggers import TBLogger, WandbLogger
     from gdf.training.trainer import Trainer
 
     if cfg.source == "local":
@@ -63,7 +76,8 @@ def train_cmd(
         parts = cfg.data_path.split("/")
         if len(parts) != 3:
             raise typer.BadParameter("roboflow data_path format: workspace/project/version")
-        ds = RoboflowDatasetSource(parts[0], parts[1], int(parts[2]))
+        yolo_format = cfg.model_version if cfg.model_version in ["v8", "v11"] else "26"
+        ds = RoboflowDatasetSource(parts[0], parts[1], int(parts[2]), format=f"yolo{yolo_format}")
     elif cfg.source == "http":
         ds = HttpDatasetSource(cfg.data_path)
     else:
@@ -84,6 +98,7 @@ def train_cmd(
     is_detect = (data_root / "data.yaml").exists()
     if is_detect:
         from gdf.models.yolo_detect import YOLODetectWrapper
+
         model = YOLODetectWrapper(version=cfg.model_version, size=cfg.model_size)
         console.print("[cyan]Detected detection dataset (data.yaml found)[/cyan]")
     else:
