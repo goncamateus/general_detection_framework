@@ -1,0 +1,46 @@
+site_name: General Detection Framework
+site_description: YOLO classification + detection + tracking framework with ONNX/TensorRT export
+site_url: https://goncamateus.github.io/general_detection_framework
+repo_url: https://github.com/goncamateus/general_detection_framework
+repo_name: goncamateus/general_detection_framework
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue
+      accent: blue
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue
+      accent: cyan
+  features:
+    - navigation.tabs
+    - navigation.top
+    - search.suggest
+    - search.highlight
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Architecture: architecture.md
+      - Configuration: configuration.md
+      - Datasets: datasets.md
+  - Guides:
+      - Training: training.md
+      - Export & Deployment: export-deployment.md
+      - Tracking: tracking.md
+      - CLI Reference: cli-reference.md
+
+markdown_extensions:
+  - attr_list
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+
+plugins:
+  - search:
+      prebuild_index: true

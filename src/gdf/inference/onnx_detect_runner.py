@@ -86,9 +86,6 @@ class ONNXDetectRunner:
         if pred.shape[0] < pred.shape[1]:
             pred = pred.T
 
-        if pred.shape[0] < pred.shape[1]:
-            pred = pred.T
-
         boxes_xywh = pred[:, :4]
         class_scores = pred[:, 4:]
 

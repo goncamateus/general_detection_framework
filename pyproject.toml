@@ -35,6 +35,7 @@ dependencies = [
 trt = ["tensorrt>=8.6"]
 gpu = ["onnxruntime-gpu"]
 jetson = ["tensorrt>=8.6", "jetson-stats"]
+docs = ["mkdocs", "mkdocs-material"]
 dev = [
     "pytest>=7.0",
     "pytest-cov",

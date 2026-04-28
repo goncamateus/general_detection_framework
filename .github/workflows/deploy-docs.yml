@@ -1,0 +1,41 @@
+name: Deploy docs
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - docs/**
+      - mkdocs.yml
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: uv-dev/setup-uv@v5
+
+      - run: uv pip install -e ".[docs]"
+
+      - run: mkdocs gh-deploy --force
+
+      - uses: actions/deploy-pages@v4
+        id: deployment
