@@ -14,7 +14,7 @@ dependencies = [
     "torchvision",
     "onnxruntime",
     "onnx",
-    "typer[all]>=0.9",
+    "typer>=0.9",
     "rich>=13.0",
     "pydantic>=2.0",
     "pyyaml>=6.0",
@@ -32,9 +32,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-trt = ["tensorrt>=8.6"]
+trt = ["tensorrt>=8.6 ; sys_platform == \"linux\""]
 gpu = ["onnxruntime-gpu"]
-jetson = ["tensorrt>=8.6", "jetson-stats"]
+jetson = ["tensorrt>=8.6 ; sys_platform == \"linux\"", "jetson-stats ; sys_platform == \"linux\""]
 docs = ["mkdocs", "mkdocs-material"]
 dev = [
     "pytest>=7.0",
