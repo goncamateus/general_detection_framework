@@ -9,6 +9,9 @@ from pydantic import BaseModel, Field
 class TrainConfig(BaseModel):
     model_version: Literal["v8", "v11", "v26"] = "v26"
     model_size: Literal["n", "s", "m", "l", "x"] = "n"
+    # detect and segment datasets share the same data.yaml — only the labels differ, so
+    # "auto" sniffs the label files. Set explicitly to skip the sniff.
+    task: Literal["auto", "cls", "detect", "segment"] = "auto"
     source: Literal["local", "roboflow", "http"]
     data_path: str
     epochs: int = Field(default=100, ge=1)
@@ -38,7 +41,7 @@ class PredictConfig(BaseModel):
     weights: Path
     source: str
     backend: Literal["pytorch", "onnx", "tensorrt"] = "pytorch"
-    task: Literal["cls", "detect"] = "cls"
+    task: Literal["cls", "detect", "segment"] = "cls"
     conf_threshold: float = Field(default=0.5, ge=0, le=1)
     imgsz: int = Field(default=224, ge=32)
     output: Path | None = None

@@ -74,9 +74,18 @@ class Trainer:
             exist_ok=True,
         )
 
-        best_weights = self.output_dir / "weights" / "best.pt"
+        # Ultralytics appends its own run name under `project`, so the path is not
+        # predictable from output_dir alone — read it back off the results object.
+        save_dir = getattr(results, "save_dir", None)
+        candidates = [
+            self.output_dir / "weights" / "best.pt",
+            self.output_dir / "best.pt",
+        ]
+        if save_dir:
+            candidates.insert(0, Path(save_dir) / "weights" / "best.pt")
+        best_weights = next((c for c in candidates if c.exists()), candidates[-1])
         if not best_weights.exists():
-            best_weights = self.output_dir / "best.pt"
+            log.warning(f"Could not locate best.pt; looked in {[str(c) for c in candidates]}")
 
         if self.logger:
             self.logger.finish()

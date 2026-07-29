@@ -47,10 +47,44 @@ YOLO_DETECT_MODELS: dict[str, dict[str, str]] = {
         "x": "yolo26x.pt",
     },
 }
+YOLO_SEG_MODELS: dict[str, dict[str, str]] = {
+    "v8": {
+        "n": "yolov8n-seg.pt",
+        "s": "yolov8s-seg.pt",
+        "m": "yolov8m-seg.pt",
+        "l": "yolov8l-seg.pt",
+        "x": "yolov8x-seg.pt",
+    },
+    "v11": {
+        "n": "yolo11n-seg.pt",
+        "s": "yolo11s-seg.pt",
+        "m": "yolo11m-seg.pt",
+        "l": "yolo11l-seg.pt",
+        "x": "yolo11x-seg.pt",
+    },
+    "v26": {
+        "n": "yolo26n-seg.pt",
+        "s": "yolo26s-seg.pt",
+        "m": "yolo26m-seg.pt",
+        "l": "yolo26l-seg.pt",
+        "x": "yolo26x-seg.pt",
+    },
+}
+
+TASK_REGISTRIES: dict[str, dict[str, dict[str, str]]] = {
+    "cls": YOLO_MODELS,
+    "detect": YOLO_DETECT_MODELS,
+    "segment": YOLO_SEG_MODELS,
+}
+
+
+def _registry_for(task: str) -> dict[str, dict[str, str]]:
+    # ponytail: unknown task falls back to cls, matching the previous if/else behaviour
+    return TASK_REGISTRIES.get(task, YOLO_MODELS)
 
 
 def get_model_name(version: str, size: str, task: str = "cls") -> str:
-    registry = YOLO_DETECT_MODELS if task == "detect" else YOLO_MODELS
+    registry = _registry_for(task)
     if version not in registry:
         raise ValueError(f"Unknown model version: {version}. Available: {list(registry)}")
     sizes = registry[version]
@@ -60,5 +94,4 @@ def get_model_name(version: str, size: str, task: str = "cls") -> str:
 
 
 def list_available_models(task: str = "cls") -> dict[str, list[str]]:
-    registry = YOLO_DETECT_MODELS if task == "detect" else YOLO_MODELS
-    return {v: list(sizes.keys()) for v, sizes in registry.items()}
+    return {v: list(sizes.keys()) for v, sizes in _registry_for(task).items()}

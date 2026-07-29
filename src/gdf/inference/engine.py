@@ -48,6 +48,49 @@ class DetectionResult:
         return results
 
 
+class SegmentationResult:
+    def __init__(
+        self,
+        masks: "np.ndarray",
+        bboxes: "np.ndarray",
+        class_ids: "np.ndarray",
+        scores: "np.ndarray",
+        class_names: list[str] | None = None,
+    ) -> None:
+        self.masks = masks
+        self.bboxes = bboxes
+        self.class_ids = class_ids
+        self.scores = scores
+        self.class_names = class_names or []
+
+    def __len__(self) -> int:
+        return len(self.class_ids)
+
+    def __repr__(self) -> str:
+        return f"SegmentationResult({len(self)} masks)"
+
+    def to_dicts(self) -> list[dict]:
+        """Serializable summary — mask area, not the mask itself."""
+        results = []
+        for i in range(len(self)):
+            name = (
+                self.class_names[self.class_ids[i]]
+                if self.class_ids[i] < len(self.class_names)
+                else str(self.class_ids[i])
+            )
+            mask = self.masks[i]
+            area_px = int(mask.sum())
+            results.append({
+                "bbox": self.bboxes[i].tolist(),
+                "class_id": int(self.class_ids[i]),
+                "class_name": name,
+                "score": float(self.scores[i]),
+                "mask_area_px": area_px,
+                "mask_area_frac": area_px / float(mask.size) if mask.size else 0.0,
+            })
+        return results
+
+
 class UnifiedPredictor:
     def __init__(
         self,
@@ -56,7 +99,7 @@ class UnifiedPredictor:
         class_names: list[str] | None = None,
         imgsz: int = 224,
         conf_threshold: float = 0.5,
-        task: Literal["cls", "detect"] = "cls",
+        task: Literal["cls", "detect", "segment"] = "cls",
     ) -> None:
         self.weights = Path(weights)
         self.backend = backend
@@ -67,10 +110,29 @@ class UnifiedPredictor:
         self._runner: object | None = None
 
     def _init_runner(self) -> None:
-        if self.task == "detect":
+        if self.task == "segment":
+            self._init_seg_runner()
+        elif self.task == "detect":
             self._init_detect_runner()
         else:
             self._init_cls_runner()
+
+    def _init_seg_runner(self) -> None:
+        if self.backend == "onnx":
+            from gdf.inference.onnx_seg_runner import ONNXSegRunner
+            self._runner = ONNXSegRunner(self.weights, self.imgsz)
+        elif self.backend == "pytorch":
+            from gdf.models.yolo_seg import YOLOSegWrapper
+            wrapper = YOLOSegWrapper()
+            wrapper.load_from_weights(self.weights)
+            self._runner = wrapper
+        elif self.backend == "tensorrt":
+            raise NotImplementedError(
+                "TensorRT segmentation runner not implemented yet — export ONNX and run "
+                "the engine with trtexec, or use backend='onnx'."
+            )
+        else:
+            raise ValueError(f"Unknown backend: {self.backend}")
 
     def _init_cls_runner(self) -> None:
         if self.backend == "onnx":
@@ -138,6 +200,41 @@ class UnifiedPredictor:
             bboxes, class_ids, scores = self._runner.detect(image, conf_threshold=self.conf_threshold)  # type: ignore[union-attr]
 
         return DetectionResult(
+            bboxes=bboxes,
+            class_ids=class_ids,
+            scores=scores,
+            class_names=self.class_names,
+        )
+
+    def segment(self, image: str | Path) -> SegmentationResult:
+        if self._runner is None:
+            self._init_runner()
+
+        if self.task != "segment":
+            raise ValueError("Use detect()/predict() for non-segmentation models")
+
+        if self.backend == "pytorch":
+            results = self._runner.predict(image, conf=self.conf_threshold)  # type: ignore[union-attr]
+            r = results[0]
+            if r.masks is None:
+                import numpy as np
+                h, w = r.orig_shape
+                masks = np.empty((0, h, w), dtype=bool)
+                bboxes = np.empty((0, 4), dtype=np.float32)
+                class_ids = np.array([], dtype=np.int32)
+                scores = np.array([], dtype=np.float32)
+            else:
+                masks = r.masks.data.cpu().numpy() > 0.5
+                bboxes = r.boxes.xyxy.cpu().numpy()
+                class_ids = r.boxes.cls.cpu().numpy().astype(int)
+                scores = r.boxes.conf.cpu().numpy()
+        else:
+            masks, bboxes, class_ids, scores = self._runner.segment(  # type: ignore[union-attr]
+                image, conf_threshold=self.conf_threshold
+            )
+
+        return SegmentationResult(
+            masks=masks,
             bboxes=bboxes,
             class_ids=class_ids,
             scores=scores,

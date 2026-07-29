@@ -21,6 +21,53 @@ data_root/
 
 Class names are inferred from folder names. `train/` is required; `val/` is recommended.
 
+## Detection / Segmentation Convention
+
+Detection and segmentation datasets use the Ultralytics layout with a `data.yaml` at the root:
+
+```
+data_root/
+  data.yaml
+  train/
+    images/frame.jpg
+    labels/frame.txt
+  valid/
+    images/
+    labels/
+```
+
+```yaml
+# data.yaml — omit `path:`, Ultralytics then resolves relative to this file's directory.
+# A relative `path:` is resolved against the global datasets_dir instead, which is rarely
+# what you want.
+train: train/images
+val: valid/images
+test: test/images
+
+nc: 1
+names: ["plume"]
+```
+
+Both tasks share this layout — **only the label rows differ**:
+
+| Task | Label row | Fields |
+|------|-----------|--------|
+| `detect` | `cls cx cy w h` | 5 |
+| `segment` | `cls x1 y1 x2 y2 x3 y3 ...` | 7+ (odd) |
+
+`gdf train` sniffs the first label file to pick the task. Override with `--task segment`
+when the sniff guesses wrong.
+
+**A dataset must not mix the two.** If any file contains only 5-field rows, Ultralytics
+warns `Box and segment counts should be equal` and then discards *every* mask in the
+dataset, which crashes training. Find the offenders with:
+
+```bash
+for f in data/plume/train/labels/*.txt; do
+  [ "$(awk '{if(NF>m)m=NF}END{print m+0}' "$f")" -le 6 ] && echo "$f"
+done
+```
+
 ## Local Datasets
 
 Point `--data-path` to a directory with `train/` and `val/` subdirs:

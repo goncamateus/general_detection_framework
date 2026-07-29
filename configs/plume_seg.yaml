@@ -1,0 +1,23 @@
+# GDF Plume Segmentation Configuration
+# Usage: gdf train --config configs/plume_seg.yaml
+#
+# Target: >=10 FPS on Jetson Nano with TensorRT FP16.
+# Train once at 640 (plume masks are small — median 0.78% of frame area), then export ONNX
+# at 640/512/416 from the same best.pt and benchmark on device to pick the largest that fits.
+
+model_version: v11
+model_size: n
+task: segment
+source: local
+data_path: data/plume
+epochs: 150
+batch_size: 16
+imgsz: 640
+lr: 0.001
+output_dir: runs/train
+project_name: plume-seg
+use_wandb: true
+use_tensorboard: true
+workers: 8
+patience: 50
+device: auto

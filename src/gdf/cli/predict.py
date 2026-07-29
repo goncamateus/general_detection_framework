@@ -17,7 +17,9 @@ def predict_cmd(
     weights: Optional[Path] = typer.Option(None, "--weights", "-w", help="Path to model weights"),
     source: Optional[str] = typer.Option(None, "--source", "-s", help="Image path or directory"),
     backend: Optional[str] = typer.Option(None, "--backend", "-b", help="Backend: pytorch, onnx, tensorrt"),
-    task: Optional[str] = typer.Option(None, "--task", "-t", help="Task: cls or detect"),
+    task: Optional[str] = typer.Option(
+        None, "--task", "-t", help="Task: cls, detect or segment"
+    ),
     conf_threshold: Optional[float] = typer.Option(None, "--conf-threshold", help="Confidence threshold"),
     imgsz: Optional[int] = typer.Option(None, "--imgsz", help="Image size"),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output CSV path"),
@@ -60,7 +62,9 @@ def predict_cmd(
 
     source_path = Path(cfg.source)
 
-    if task == "detect":
+    if task == "segment":
+        _predict_segment(predictor, source_path, cfg)
+    elif task == "detect":
         _predict_detect(predictor, source_path, cfg)
     else:
         _predict_cls(predictor, source_path, cfg)
@@ -128,6 +132,46 @@ def _predict_detect(predictor, source_path: Path, cfg) -> None:
         console.print(f"[cyan]{source_path.name}[/cyan] → {len(det)} detections")
         for d in det.to_dicts()[:5]:
             console.print(f"  {d['class_name']} ({d['score']:.2f}) {d['bbox']}")
+
+
+def _predict_segment(predictor, source_path: Path, cfg) -> None:
+    image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
+    if source_path.is_dir():
+        images = sorted([f for f in source_path.iterdir() if f.suffix.lower() in image_extensions])
+    else:
+        images = [source_path]
+
+    table = Table(title="Segmentation Results", show_lines=True)
+    table.add_column("Image", style="cyan")
+    table.add_column("Class", style="green")
+    table.add_column("Confidence", style="yellow")
+    table.add_column("Mask px", style="magenta")
+    table.add_column("Mask %", style="dim")
+
+    rows_for_csv = []
+    for img_path in images:
+        seg = predictor.segment(img_path)
+        for d in seg.to_dicts():
+            table.add_row(
+                img_path.name,
+                d["class_name"],
+                f"{d['score']:.3f}",
+                str(d["mask_area_px"]),
+                f"{d['mask_area_frac'] * 100:.2f}%",
+            )
+            rows_for_csv.append({"image": img_path.name, **d})
+
+    console.print(table)
+    console.print(f"[cyan]{len(images)} images → {len(rows_for_csv)} masks[/cyan]")
+
+    if cfg.output and rows_for_csv:
+        import csv
+        cfg.output.parent.mkdir(parents=True, exist_ok=True)
+        with open(cfg.output, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=rows_for_csv[0].keys())
+            writer.writeheader()
+            writer.writerows(rows_for_csv)
+        console.print(f"[green]Results saved:[/green] {cfg.output}")
 
 
 def _load_and_merge(config_path: Path | None, cli_overrides: dict) -> PredictConfig:

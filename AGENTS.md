@@ -11,6 +11,7 @@ GDF — YOLO classification + detection + tracking framework. Ultralytics models
 - CLI entrypoint: `gdf.cli.app:app` registered as `gdf` console script
 - Model names: Ultralytics convention. `yolo26n-cls.pt`, NOT `yolov26n-cls.pt`. Same for v8 (`yolov8n-cls.pt`) and v11 (`yolo11n-cls.pt`)
 - Detection models: `yolo26n.pt`, `yolov8n.pt`, `yolo11n.pt` (no `-cls` suffix)
+- Segmentation models: `yolo11n-seg.pt`, `yolov8n-seg.pt`, `yolo26n-seg.pt`
 
 ## Commands
 
@@ -72,10 +73,10 @@ data_root/
 |-----|------|
 | `config/` | Pydantic schemas only, no logic |
 | `datasets/` | Source resolution (local/roboflow/http), transforms, DataLoader factory |
-| `models/` | Registry (version+size→`.pt` name), YOLOClsWrapper, YOLODetectWrapper |
+| `models/` | Registry (version+size→`.pt` name), YOLOClsWrapper, YOLODetectWrapper, YOLOSegWrapper |
 | `training/` | Trainer orchestrator, loggers (TB/W&B/CSV), callbacks, metrics |
 | `export/` | ONNX export + verify, TensorRT build (trtexec CLI or Python API), Jetson deploy |
-| `inference/` | UnifiedPredictor (auto-detect backend, cls/detect task), ONNX/TRT runners, ByteTrack |
+| `inference/` | UnifiedPredictor (auto-detect backend, cls/detect/segment task), ONNX/TRT runners, ByteTrack |
 | `inference/tracker/` | ByteTrack: Kalman filter, Track state, Hungarian matching |
 | `cli/` | Typer commands, YAML+CLI merge logic |
 | `utils/` | Logging (Rich), file I/O, device detection |
@@ -89,5 +90,13 @@ data_root/
 - CLI imports heavy modules (torch, ultralytics) lazily inside command functions, not at module top
 - `--wandb/--no-wandb` and `--tensorboard/--no-tensorboard` are Typer flag pairs, not `--use-wandb`
 - `gdf train` without `--config` requires both `--source` and `--data-path` or it errors
-- Detection models use `task="detect"` in UnifiedPredictor, classification uses `task="cls"`
+- Detection models use `task="detect"` in UnifiedPredictor, classification uses `task="cls"`, segmentation `task="segment"`
 - ByteTrack output shape for YOLO detect ONNX: `[1, 84, 8400]` (4 box coords + 80 class scores)
+- Segmentation ONNX has **two** outputs: `[1, 4+nc+32, 8400]` predictions + `[1, 32, imgsz/4, imgsz/4]` mask prototypes. `ONNXSegRunner` picks them apart by rank (3-D vs 4-D), not by output order
+- `TrainConfig.task` defaults to `"auto"`: no `data.yaml` → `cls`; otherwise the first label file decides (5 fields = detect, >5 = segment). Detect and segment datasets are otherwise indistinguishable
+- Roboflow label `.txt` files have **no trailing newline** — `wc -l` and `readlines()` undercount. Split on `"\n"` and filter empties
+- A segment dataset with any 5-field (bbox) label row makes Ultralytics drop *every* mask and crash training. See `docs/datasets.md` for the one-liner that finds them
+- `gdf export --format onnx --half` produces a graph whose nodes are not topologically sorted (onnxconverter-common appends the input Cast last). `verify_onnx()` reorders and re-saves it; prefer FP32 ONNX + `trtexec --fp16` instead
+- No TensorRT segmentation runner yet — export ONNX and run it via `trtexec`, or use `backend="onnx"`
+- `python -m gdf.cli.app` needs the `__main__` guard in `cli/app.py` (Dockerfile.jetson ENTRYPOINT depends on it); without it the command silently no-ops
+- Ultralytics writes weights to its own `save_dir` (`project/<name>/weights/best.pt`), not to `output_dir/weights/` — `Trainer` reads `results.save_dir` rather than guessing

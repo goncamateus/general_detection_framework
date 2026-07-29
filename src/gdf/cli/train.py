@@ -20,6 +20,9 @@ def train_cmd(
     model_size: Optional[str] = typer.Option(
         None, "--model-size", "-ms", help="Model size: n, s, m, l, x"
     ),
+    task: Optional[str] = typer.Option(
+        None, "--task", "-t", help="Task: auto, cls, detect, segment"
+    ),
     source: Optional[str] = typer.Option(
         None, "--source", "-s", help="Dataset source: local, roboflow, http"
     ),
@@ -45,6 +48,7 @@ def train_cmd(
         {
             "model_version": model_version,
             "model_size": model_size,
+            "task": task,
             "source": source,
             "data_path": data_path,
             "epochs": epochs,
@@ -66,7 +70,6 @@ def train_cmd(
     from gdf.datasets.http import HttpDatasetSource
     from gdf.datasets.local import LocalDatasetSource
     from gdf.datasets.roboflow import RoboflowDatasetSource
-    from gdf.models.yolo_cls import YOLOClsWrapper
     from gdf.training.loggers import TBLogger, WandbLogger
     from gdf.training.trainer import Trainer
 
@@ -94,16 +97,22 @@ def train_cmd(
     if cfg.use_wandb:
         loggers.append(WandbLogger(project=cfg.project_name, config=cfg.model_dump()))
 
-    # Auto-detect task: data.yaml → detect, ImageFolder → cls
-    is_detect = (data_root / "data.yaml").exists()
-    if is_detect:
+    task = _resolve_task(cfg.task, data_root)
+    console.print(f"[cyan]Task: {task}[/cyan]")
+
+    if task == "segment":
+        from gdf.models.yolo_seg import YOLOSegWrapper
+
+        model = YOLOSegWrapper(version=cfg.model_version, size=cfg.model_size)
+    elif task == "detect":
         from gdf.models.yolo_detect import YOLODetectWrapper
 
         model = YOLODetectWrapper(version=cfg.model_version, size=cfg.model_size)
-        console.print("[cyan]Detected detection dataset (data.yaml found)[/cyan]")
     else:
+        from gdf.models.yolo_cls import YOLOClsWrapper
+
         model = YOLOClsWrapper(version=cfg.model_version, size=cfg.model_size)
-        console.print("[cyan]Detected classification dataset (ImageFolder)[/cyan]")
+
     trainer = Trainer(
         model=model,
         data_path=data_root,
@@ -120,6 +129,31 @@ def train_cmd(
 
     best_weights = trainer.train()
     console.print(f"\n[green]Training complete![/green] Best weights: {best_weights}")
+
+
+def _resolve_task(task: str, data_root: Path) -> str:
+    """Pick the Ultralytics task for a dataset root.
+
+    Detection and segmentation datasets share the same data.yaml; only the label rows
+    differ (detect: `cls cx cy w h` = 5 fields, segment: `cls x1 y1 x2 y2 ...` = 7+).
+    """
+    if task != "auto":
+        return task
+    if not (data_root / "data.yaml").exists():
+        return "cls"
+
+    for labels_dir in (data_root / "train" / "labels", data_root / "labels"):
+        if not labels_dir.is_dir():
+            continue
+        for label_file in sorted(labels_dir.glob("*.txt")):
+            # Roboflow exports have no trailing newline, so readlines() undercounts.
+            rows = [r for r in label_file.read_text().split("\n") if r.strip()]
+            if not rows:
+                continue
+            return "segment" if len(rows[0].split()) > 5 else "detect"
+
+    console.print("[yellow]No labels found to sniff; assuming detect[/yellow]")
+    return "detect"
 
 
 def _load_and_merge(config_path: Path | None, cli_overrides: dict) -> TrainConfig:

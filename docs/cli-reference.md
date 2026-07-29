@@ -19,7 +19,7 @@ gdf info
 
 ## gdf train
 
-Train a YOLO-cls model.
+Train a YOLO classification, detection, or segmentation model.
 
 ```bash
 gdf train [OPTIONS]
@@ -30,6 +30,7 @@ gdf train [OPTIONS]
 | `--config` | `-c` | Path | YAML config file |
 | `--model-version` | `-mv` | str | `v8`, `v11`, `v26` |
 | `--model-size` | `-ms` | str | `n`, `s`, `m`, `l`, `x` |
+| `--task` | `-t` | str | `auto` (default), `cls`, `detect`, `segment` |
 | `--source` | `-s` | str | `local`, `roboflow`, `http` |
 | `--data-path` | `-d` | str | Path or URL to dataset |
 | `--epochs` | `-e` | int | Training epochs |
@@ -58,6 +59,9 @@ gdf train --source roboflow --data-path my-workspace/project/1
 
 # HTTP download
 gdf train --source http --data-path https://example.com/data.zip
+
+# Segmentation (plume dataset)
+gdf train --config configs/plume_seg.yaml
 ```
 
 ## gdf export
@@ -101,6 +105,7 @@ gdf predict [OPTIONS]
 | `--weights` | `-w` | Path | Model weights |
 | `--source` | `-s` | str | Image path or directory |
 | `--backend` | `-b` | str | `pytorch`, `onnx`, `tensorrt` |
+| `--task` | `-t` | str | `cls` (default), `detect`, `segment` |
 | `--conf-threshold` | | float | Confidence threshold (0-1) |
 | `--imgsz` | | int | Image size |
 | `--output` | `-o` | Path | Output CSV path |
@@ -118,7 +123,14 @@ gdf predict --weights model.engine --source data/test/ --backend tensorrt --outp
 
 # With class names file
 gdf predict --weights model.onnx --source img.jpg --class-names classes.txt
+
+# Segmentation — reports per-instance mask area
+gdf predict --weights best.onnx --source data/plume/test/images \
+            --task segment --backend onnx --imgsz 640 --conf-threshold 0.25
 ```
+
+`--task segment` has no `tensorrt` backend yet: export ONNX and benchmark/run the engine
+with `trtexec`, or stay on `--backend onnx`.
 
 ## gdf track
 

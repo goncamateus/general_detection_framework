@@ -41,3 +41,7 @@ app.command(name="predict")(predict_cmd)
 app.command(name="track")(track_cmd)
 app.command(name="webcam")(webcam_cmd)
 app.command(name="info")(info_cmd)
+
+
+if __name__ == "__main__":  # `python -m gdf.cli.app`, used by Dockerfile.jetson
+    app()
