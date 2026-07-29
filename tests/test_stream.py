@@ -133,3 +133,36 @@ def test_build_runner_rejects_trt_segmentation(tmp_path: Path):
 def test_build_runner_rejects_unknown_backend(tmp_path: Path):
     with pytest.raises(typer.BadParameter, match="--backend must be"):
         _build_runner(tmp_path / "m.onnx", "segment", "openvino", 640)
+
+
+def test_headless_when_no_display(video: Path, tmp_path: Path, monkeypatch):
+    """A missing X/Wayland session must degrade to headless, not abort the process."""
+    monkeypatch.setattr("gdf.inference.stream.platform.system", lambda: "Linux")
+    monkeypatch.delenv("DISPLAY", raising=False)
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+
+    def explode(*_args, **_kwargs):
+        raise AssertionError("cv2.namedWindow must not be reached without a display")
+
+    monkeypatch.setattr(cv2, "namedWindow", explode)
+
+    out = tmp_path / "out.mp4"
+    assert run_stream(StubSegRunner(), str(video), "segment", output_path=out, show=True) == 10
+    assert out.exists()
+
+
+def test_has_display_follows_the_environment(monkeypatch):
+    from gdf.inference.stream import has_display
+
+    monkeypatch.setattr("gdf.inference.stream.platform.system", lambda: "Linux")
+    monkeypatch.delenv("DISPLAY", raising=False)
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    assert has_display() is False
+
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
+    assert has_display() is True
+
+    # Non-Linux platforms always have a usable GUI backend.
+    monkeypatch.setattr("gdf.inference.stream.platform.system", lambda: "Windows")
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    assert has_display() is True

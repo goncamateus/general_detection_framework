@@ -210,6 +210,15 @@ gdf run --model best.onnx --task segment --video flight.mp4 --output annotated.m
 Press `q` or `ESC` to quit. Frames are only sampled to `--save-frames` when the model
 actually found something, so you do not end up with a directory of empty background.
 
+With no X/Wayland session (SSH, a headless Jetson) the run drops to headless automatically
+and says so — pass `--output` or `--save-frames` or nothing is kept. Checking `DISPLAY`
+up front matters: OpenCV's Qt backend aborts the whole process rather than raising, so
+there would be nothing left to catch.
+
+`--imgsz` cannot resize an exported graph — ONNX and TensorRT bake the input shape in. If
+it disagrees with the model, the run logs the mismatch and uses the model's size. Export
+at the size you want to run at.
+
 `--backend tensorrt` works for `detect` only; there is no TensorRT segmentation runner yet.
 
 **Grabbing example images from a video:**

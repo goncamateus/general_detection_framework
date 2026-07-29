@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import platform
 from pathlib import Path
 
@@ -19,6 +20,17 @@ PALETTE = [
     (182, 89, 155),
     (15, 196, 241),
 ]
+
+
+def has_display() -> bool:
+    """Whether a GUI window can be opened.
+
+    Checked before touching cv2's GUI: with no X/Wayland session the Qt plugin fails to
+    initialize and aborts the process outright, so there is no exception left to catch.
+    """
+    if platform.system() != "Linux":
+        return True
+    return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
 
 
 def open_capture(source: int | str) -> cv2.VideoCapture:
@@ -102,6 +114,13 @@ def run_stream(
     Returns the number of frames processed.
     """
     class_names = class_names or []
+
+    if show and not has_display():
+        log.warning("No display detected (DISPLAY/WAYLAND_DISPLAY unset) — running headless")
+        if output_path is None and save_frames_dir is None:
+            log.warning("Nothing will be saved: pass --output and/or --save-frames")
+        show = False
+
     cap = open_capture(source)
     if not cap.isOpened():
         raise RuntimeError(f"Cannot open source: {source}")
@@ -122,8 +141,12 @@ def run_stream(
 
     win = "GDF"
     if show:
-        cv2.namedWindow(win, cv2.WINDOW_NORMAL)
-        cv2.resizeWindow(win, w, h)
+        try:
+            cv2.namedWindow(win, cv2.WINDOW_NORMAL)
+            cv2.resizeWindow(win, w, h)
+        except cv2.error as e:  # headless opencv build, or a broken GUI backend
+            log.warning(f"Cannot open a window ({e.err.strip() if e.err else e}) — headless")
+            show = False
 
     frame_idx = 0
     saved = 0

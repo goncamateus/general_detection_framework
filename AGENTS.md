@@ -104,6 +104,9 @@ data_root/
 - `gdf eval` writes `metrics.csv` and its prediction grids into the Ultralytics `save_dir` (`runs/<task>/val*/`); a relative `--output` is resolved against it
 - `gdf run` (webcam/video overlay) is separate from `gdf webcam`, which is detect+ByteTrack only. `run` covers segment and takes a `--video` source; neither replaces the other yet
 - `ONNXDetectRunner.detect()` / `ONNXSegRunner.segment()` take a path **or** a decoded BGR frame, via `as_frame()` — that is what lets `gdf run` feed video frames straight in
+- `gdf run` checks `DISPLAY`/`WAYLAND_DISPLAY` before touching cv2's GUI: OpenCV's Qt backend *aborts the process* with no display, so a try/except around `namedWindow` is not enough on its own
+- `--imgsz` is advisory for ONNX/TRT weights: the graph's input shape is fixed at export time and wins. The runner logs the mismatch
+- onnxruntime falls back to CPU when its CUDA libs are missing; the runner logs the *active* provider so this is visible. Fix with `LD_LIBRARY_PATH` pointing at PyTorch's bundled `nvidia/cu13/lib` and `nvidia/cudnn/lib` (see docs/export-deployment.md)
 - `scripts/temporal_split.py` is only meaningful if you **retrain** on its split. Scoring a model trained on the original random split against the temporal holdout reproduces the same inflated number, because that model already saw those frames
 - No TensorRT segmentation runner yet — export ONNX and run it via `trtexec`, or use `backend="onnx"`
 - `python -m gdf.cli.app` needs the `__main__` guard in `cli/app.py` (Dockerfile.jetson ENTRYPOINT depends on it); without it the command silently no-ops

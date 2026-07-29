@@ -9,7 +9,7 @@ from gdf.inference.tracker import ByteTracker, ByteTrackResult
 from gdf.utils.logging import log
 
 
-def as_frame(image: "str | Path | np.ndarray") -> np.ndarray:
+def as_frame(image: str | Path | np.ndarray) -> np.ndarray:
     """Accept either a path to read or an already-decoded BGR frame."""
     if isinstance(image, np.ndarray):
         return image
@@ -25,16 +25,24 @@ class ONNXDetectRunner:
     def __init__(self, model_path: Path, imgsz: int = 640) -> None:
         import onnxruntime as ort
 
-        providers = ort.get_available_providers()
-        log.info(f"ONNX detect providers: {providers}")
+        self.session = ort.InferenceSession(
+            str(model_path), providers=ort.get_available_providers()
+        )
+        # Report what actually loaded, not what was on offer: onnxruntime silently drops
+        # providers whose CUDA/TensorRT libraries are missing and falls back to CPU.
+        active = self.session.get_providers()
+        log.info(f"ONNX provider: {active[0]}")
+        if active[0] == "CPUExecutionProvider" and len(ort.get_available_providers()) > 1:
+            log.warning("Running on CPU — GPU providers were available but failed to load")
 
-        self.session = ort.InferenceSession(str(model_path), providers=providers)
         self.input_name = self.session.get_inputs()[0].name
-        if self.session.get_inputs()[0].shape[2] != imgsz:
-            real_size = self.session.get_inputs()[0].shape[2]
-            log.warning(f"Model input size {real_size} does not match imgsz {imgsz}")
-            log.warning("Transforms will be applied to resize input.")
-            imgsz = self.session.get_inputs()[0].shape[2]
+        model_imgsz = self.session.get_inputs()[0].shape[2]
+        if model_imgsz != imgsz:
+            log.warning(
+                f"--imgsz {imgsz} ignored: this graph is fixed at {model_imgsz}. "
+                f"Export at {imgsz} to run there."
+            )
+            imgsz = model_imgsz
         self.imgsz = imgsz
         self.tracker: ByteTracker | None = None
 

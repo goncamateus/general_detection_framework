@@ -31,6 +31,28 @@ gdf export --weights best.pt --format onnx --imgsz 640      # FP32 ONNX
 trtexec --onnx=best.onnx --fp16 --saveEngine=plume.engine   # FP16 happens here
 ```
 
+### onnxruntime silently falling back to CPU
+
+`gdf run` and `gdf predict` log the provider that actually loaded, and warn when GPU
+providers were on offer but failed. The usual cause is that onnxruntime's wheel wants CUDA
+libraries it cannot find: PyTorch ships them inside the venv, but onnxruntime only searches
+the system loader path.
+
+```
+Failed to load library ...libonnxruntime_providers_cuda.so
+  with error: libcublasLt.so.13: cannot open shared object file
+```
+
+Point the loader at the ones PyTorch already installed:
+
+```bash
+NV=$(python -c 'import nvidia, pathlib; print(pathlib.Path(nvidia.__file__).parent)')
+export LD_LIBRARY_PATH="$NV/cu13/lib:$NV/cudnn/lib:$LD_LIBRARY_PATH"
+```
+
+`TensorrtExecutionProvider` needs a real TensorRT install (`libnvinfer.so`) on top of that;
+the CUDA provider alone is enough for desktop testing.
+
 ## TensorRT Export
 
 ```bash
