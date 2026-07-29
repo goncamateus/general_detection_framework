@@ -91,6 +91,49 @@ gdf export --weights best.pt --format both --half
 gdf export --config configs/export.yaml
 ```
 
+## gdf eval
+
+Score a trained model on a dataset split. Delegates to Ultralytics `.val()`, so the metrics
+are whatever the task reports: mAP/precision/recall for detect and segment (box **and** mask
+columns), top-1/top-5 for cls.
+
+```bash
+gdf eval --model best.pt --data data/plume
+```
+
+| Flag | Short | Type | Description |
+|------|-------|------|-------------|
+| `--weights` / `--model` | `-w` / `-m` | Path | `.pt`, `.onnx`, or `.engine` |
+| `--data` | `-d` | str | `data.yaml`, or a dataset root containing one |
+| `--split` | | str | `train`, `val` (default), `test` |
+| `--task` | `-t` | str | `auto` (default), `cls`, `detect`, `segment` |
+| `--imgsz` | | int | Image size (default 640) |
+| `--batch-size` | `-b` | int | Batch size |
+| `--conf-threshold` | | float | Confidence threshold (default 0.001, mAP convention) |
+| `--iou-threshold` | | float | NMS IoU (default 0.6) |
+| `--output` | `-o` | Path | Metrics CSV |
+| `--device` | | str | `auto`, `cpu`, `cuda:0` |
+
+**Examples:**
+
+```bash
+# Held-out test split, metrics to CSV
+gdf eval -m runs/train/plume-seg/train/weights/best.pt -d data/plume --split test -o metrics.csv
+
+# Exported graph — .onnx/.engine carry no task, so name it
+gdf eval -m runs/export/plume-640/best.onnx -t segment -d data/plume --imgsz 640 -b 1
+
+# Temporally honest holdout (see scripts/temporal_split.py)
+python scripts/temporal_split.py data/plume
+gdf eval -m best.pt -d data/plume_temporal
+```
+
+`--task` is required for `.onnx` and `.engine` weights: only a `.pt` checkpoint records
+which head it was trained with.
+
+The reported FPS is this machine's, and it excludes the training-only loss stage. It is a
+sanity check, not a Jetson number — benchmark the engine on the device with `trtexec`.
+
 ## gdf predict
 
 Run inference on images.

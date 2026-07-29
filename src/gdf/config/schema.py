@@ -48,6 +48,19 @@ class PredictConfig(BaseModel):
     device: str = "auto"
 
 
+class EvalConfig(BaseModel):
+    weights: Path
+    data: str
+    split: Literal["train", "val", "test"] = "val"
+    task: Literal["auto", "cls", "detect", "segment"] = "auto"
+    imgsz: int = Field(default=640, ge=32)
+    batch_size: int = Field(default=16, ge=1)
+    conf_threshold: float = Field(default=0.001, ge=0, le=1)
+    iou_threshold: float = Field(default=0.6, ge=0, le=1)
+    output: Path | None = None
+    device: str = "auto"
+
+
 class TrackConfig(BaseModel):
     weights: Path
     source: str

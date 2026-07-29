@@ -9,6 +9,11 @@ Nothing on disk is moved: it writes symlink trees plus a data.yaml you can point
 
     python scripts/temporal_split.py data/plume
     gdf train --config configs/plume_seg.yaml --data-path data/plume_temporal
+    gdf eval --model runs/.../best.pt --data data/plume_temporal
+
+You must RETRAIN on this split for the number to mean anything. Scoring a model that was
+trained on the original random split against this holdout tells you nothing — it already
+saw those frames during training, so it will score just as high here.
 """
 
 from __future__ import annotations
@@ -78,9 +83,10 @@ def main() -> None:
                 dst.symlink_to(src.resolve())
 
     names = [n.strip() for n in args.names.split(",")]
+    # No `path:` key — a relative one resolves against Ultralytics' global datasets_dir,
+    # not against this file. Omitting it makes the yaml's own directory the root.
     (out / "data.yaml").write_text(
-        "path: .\ntrain: train/images\nval: val/images\n"
-        f"\nnc: {len(names)}\nnames: {names}\n"
+        f"train: train/images\nval: val/images\n\nnc: {len(names)}\nnames: {names}\n"
     )
     n_train, n_val = len(assignments["train"]), len(assignments["val"])
     print(f"\nWrote {out}/data.yaml  ({n_train} train / {n_val} val)")

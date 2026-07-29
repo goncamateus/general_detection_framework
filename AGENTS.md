@@ -24,6 +24,7 @@ ruff check src/ tests/               # lint
 ruff format src/ tests/              # format
 mypy src/                            # typecheck
 gdf info                             # env/device check
+gdf eval -m best.pt -d data/plume    # score a split (mAP + latency)
 gdf train --config configs/default.yaml --epochs 1
 gdf track --weights model.onnx --source video.mp4 --backend onnx --output tracked.mp4
 ```
@@ -97,6 +98,9 @@ data_root/
 - Roboflow label `.txt` files have **no trailing newline** — `wc -l` and `readlines()` undercount. Split on `"\n"` and filter empties
 - A segment dataset with any 5-field (bbox) label row makes Ultralytics drop *every* mask and crash training. See `docs/datasets.md` for the one-liner that finds them
 - `gdf export --format onnx --half` produces a graph whose nodes are not topologically sorted (onnxconverter-common appends the input Cast last). `verify_onnx()` reorders and re-saves it; prefer FP32 ONNX + `trtexec --fp16` instead
+- `gdf eval` delegates to Ultralytics `.val()` and renders `results.results_dict` generically — no per-task branching, so cls/detect/segment all work without changes
+- `gdf eval` needs `--task` for `.onnx`/`.engine` weights; only `.pt` records its task
+- `scripts/temporal_split.py` is only meaningful if you **retrain** on its split. Scoring a model trained on the original random split against the temporal holdout reproduces the same inflated number, because that model already saw those frames
 - No TensorRT segmentation runner yet — export ONNX and run it via `trtexec`, or use `backend="onnx"`
 - `python -m gdf.cli.app` needs the `__main__` guard in `cli/app.py` (Dockerfile.jetson ENTRYPOINT depends on it); without it the command silently no-ops
 - Ultralytics writes weights to its own `save_dir` (`project/<name>/weights/best.pt`), not to `output_dir/weights/` — `Trainer` reads `results.save_dir` rather than guessing
