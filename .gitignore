@@ -34,3 +34,8 @@ graphify-out/
 # OS
 .DS_Store
 Thumbs.db
+
+# Media artifacts
+*.mp4
+*.avi
+*.mkv
