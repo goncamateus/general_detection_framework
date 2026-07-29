@@ -5,7 +5,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from gdf.inference.onnx_detect_runner import ONNXDetectRunner
+from gdf.inference.onnx_detect_runner import ONNXDetectRunner, as_frame
 
 
 class ONNXSegRunner(ONNXDetectRunner):
@@ -23,17 +23,15 @@ class ONNXSegRunner(ONNXDetectRunner):
 
     def segment(
         self,
-        image: str | Path,
+        image: str | Path | np.ndarray,
         conf_threshold: float = 0.25,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        """Run segmentation on a single image.
+        """Run segmentation on a single image path or BGR frame.
 
         Returns:
             masks (N, orig_h, orig_w) bool, bboxes (N, 4) xyxy, class_ids (N,), scores (N,)
         """
-        img = cv2.imread(str(image))
-        if img is None:
-            raise FileNotFoundError(f"Cannot read image: {image}")
+        img = as_frame(image)
 
         blob, _scale, pad = self._preprocess(img)
         outputs = self.session.run(None, {self.input_name: blob})

@@ -25,6 +25,7 @@ ruff format src/ tests/              # format
 mypy src/                            # typecheck
 gdf info                             # env/device check
 gdf eval -m best.pt -d data/plume    # score a split (mAP + latency)
+gdf run -m best.onnx --video v.mp4   # live overlay on webcam/video
 gdf train --config configs/default.yaml --epochs 1
 gdf track --weights model.onnx --source video.mp4 --backend onnx --output tracked.mp4
 ```
@@ -100,6 +101,9 @@ data_root/
 - `gdf export --format onnx --half` produces a graph whose nodes are not topologically sorted (onnxconverter-common appends the input Cast last). `verify_onnx()` reorders and re-saves it; prefer FP32 ONNX + `trtexec --fp16` instead
 - `gdf eval` delegates to Ultralytics `.val()` and renders `results.results_dict` generically — no per-task branching, so cls/detect/segment all work without changes
 - `gdf eval` needs `--task` for `.onnx`/`.engine` weights; only `.pt` records its task
+- `gdf eval` writes `metrics.csv` and its prediction grids into the Ultralytics `save_dir` (`runs/<task>/val*/`); a relative `--output` is resolved against it
+- `gdf run` (webcam/video overlay) is separate from `gdf webcam`, which is detect+ByteTrack only. `run` covers segment and takes a `--video` source; neither replaces the other yet
+- `ONNXDetectRunner.detect()` / `ONNXSegRunner.segment()` take a path **or** a decoded BGR frame, via `as_frame()` — that is what lets `gdf run` feed video frames straight in
 - `scripts/temporal_split.py` is only meaningful if you **retrain** on its split. Scoring a model trained on the original random split against the temporal holdout reproduces the same inflated number, because that model already saw those frames
 - No TensorRT segmentation runner yet — export ONNX and run it via `trtexec`, or use `backend="onnx"`
 - `python -m gdf.cli.app` needs the `__main__` guard in `cli/app.py` (Dockerfile.jetson ENTRYPOINT depends on it); without it the command silently no-ops

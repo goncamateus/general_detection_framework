@@ -111,8 +111,14 @@ gdf eval --model best.pt --data data/plume
 | `--batch-size` | `-b` | int | Batch size |
 | `--conf-threshold` | | float | Confidence threshold (default 0.001, mAP convention) |
 | `--iou-threshold` | | float | NMS IoU (default 0.6) |
-| `--output` | `-o` | Path | Metrics CSV |
+| `--output` | `-o` | Path | Metrics CSV name/path (default `metrics.csv`) |
+| `--plots/--no-plots` | | flag | Write prediction grids + PR curves (default on) |
 | `--device` | | str | `auto`, `cpu`, `cuda:0` |
+
+Artifacts land in the Ultralytics run directory (`runs/<task>/val*/`), not the CWD — a
+relative `--output` is resolved against it, an absolute one wins. Alongside `metrics.csv`
+you get `val_batch*_labels.jpg` (ground truth) and `val_batch*_pred.jpg` (model), which are
+the quickest way to eyeball segmentation quality, plus PR/F1 curves and a confusion matrix.
 
 **Examples:**
 
@@ -174,6 +180,44 @@ gdf predict --weights best.onnx --source data/plume/test/images \
 
 `--task segment` has no `tensorrt` backend yet: export ONNX and benchmark/run the engine
 with `trtexec`, or stay on `--backend onnx`.
+
+## gdf run
+
+Run a model live on a webcam or a video file, drawing masks (segment) or boxes (detect)
+with a rolling FPS readout. Takes exported weights — `.onnx` or `.engine`, not `.pt`.
+
+```bash
+gdf run --model best.onnx --task segment --webcam 0
+gdf run --model best.onnx --task segment --video flight.mp4 --output annotated.mp4
+```
+
+| Flag | Short | Type | Description |
+|------|-------|------|-------------|
+| `--weights` / `--model` | `-w` / `-m` | Path | `.onnx` or `.engine` |
+| `--webcam` | | int | Camera index — mutually exclusive with `--video` |
+| `--video` | | Path | Video file — mutually exclusive with `--webcam` |
+| `--task` | `-t` | str | `segment` (default) or `detect` |
+| `--backend` | `-b` | str | `onnx` (default) or `tensorrt` |
+| `--imgsz` | | int | Model input size (default 640) |
+| `--conf-threshold` | | float | Confidence threshold (default 0.25) |
+| `--output` | `-o` | Path | Save the annotated video |
+| `--save-frames` | | Path | Directory for sample annotated frames |
+| `--save-every` | | int | Save one frame every N (default 30) |
+| `--class-names` | | Path | Class names, one per line |
+| `--no-show` | | flag | Headless — no window (for SSH / Jetson) |
+| `--max-frames` | | int | Stop after N frames |
+
+Press `q` or `ESC` to quit. Frames are only sampled to `--save-frames` when the model
+actually found something, so you do not end up with a directory of empty background.
+
+`--backend tensorrt` works for `detect` only; there is no TensorRT segmentation runner yet.
+
+**Grabbing example images from a video:**
+
+```bash
+gdf run -m best.onnx -t segment --video flight.mp4 --no-show \
+        --save-frames examples/ --save-every 15 --class-names classes.txt
+```
 
 ## gdf track
 

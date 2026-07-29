@@ -31,7 +31,12 @@ def eval_cmd(
         None, "--conf-threshold", help="Confidence threshold"
     ),
     iou_threshold: Optional[float] = typer.Option(None, "--iou-threshold", help="NMS IoU"),
-    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output CSV path"),
+    output: Optional[Path] = typer.Option(
+        None, "--output", "-o", help="Metrics CSV name or path (default: metrics.csv in save_dir)"
+    ),
+    plots: bool = typer.Option(
+        True, "--plots/--no-plots", help="Write GT-vs-prediction grids and PR curves"
+    ),
     device: Optional[str] = typer.Option(None, "--device", help="Device: auto, cpu, cuda:0"),
 ) -> None:
     """Score a trained model on a dataset split (mAP, precision/recall, latency)."""
@@ -82,7 +87,7 @@ def eval_cmd(
         conf=cfg.conf_threshold,
         iou=cfg.iou_threshold,
         device=cfg.device if cfg.device != "auto" else None,
-        plots=False,
+        plots=plots,
         verbose=False,
     )
 
@@ -92,15 +97,29 @@ def eval_cmd(
 
     _print_metrics(row, model.task)
 
-    if cfg.output:
-        import csv
+    # Land next to the artifacts Ultralytics just wrote (runs/<task>/val*/), not in the CWD.
+    # An absolute --output still wins.
+    save_dir = Path(getattr(results, "save_dir", None) or ".")
+    out_path = cfg.output or Path("metrics.csv")
+    if not out_path.is_absolute():
+        out_path = save_dir / out_path
 
-        cfg.output.parent.mkdir(parents=True, exist_ok=True)
-        with open(cfg.output, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=list(row))
-            writer.writeheader()
-            writer.writerow(row)
-        console.print(f"[green]Metrics saved:[/green] {cfg.output}")
+    import csv
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(row))
+        writer.writeheader()
+        writer.writerow(row)
+    console.print(f"[green]Metrics saved:[/green] {out_path}")
+
+    if plots:
+        grids = sorted(save_dir.glob("val_batch*_pred.jpg"))
+        if grids:
+            console.print(
+                f"[green]Prediction grids:[/green] {len(grids)} in {save_dir} "
+                "(*_labels.jpg = ground truth, *_pred.jpg = model)"
+            )
 
 
 def _resolve_data(data: str) -> str:

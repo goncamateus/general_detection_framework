@@ -9,6 +9,16 @@ from gdf.inference.tracker import ByteTracker, ByteTrackResult
 from gdf.utils.logging import log
 
 
+def as_frame(image: "str | Path | np.ndarray") -> np.ndarray:
+    """Accept either a path to read or an already-decoded BGR frame."""
+    if isinstance(image, np.ndarray):
+        return image
+    img = cv2.imread(str(image))
+    if img is None:
+        raise FileNotFoundError(f"Cannot read image: {image}")
+    return img
+
+
 class ONNXDetectRunner:
     """ONNX Runtime runner for YOLO detection models with tracking."""
 
@@ -169,17 +179,15 @@ class ONNXDetectRunner:
 
     def detect(
         self,
-        image: str | Path,
+        image: str | Path | np.ndarray,
         conf_threshold: float = 0.25,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Run detection on a single image.
+        """Run detection on a single image path or BGR frame.
 
         Returns:
             bboxes (N, 4) xyxy, class_ids (N,), scores (N,)
         """
-        img = cv2.imread(str(image))
-        if img is None:
-            raise FileNotFoundError(f"Cannot read image: {image}")
+        img = as_frame(image)
 
         blob, scale, pad = self._preprocess(img)
         outputs = self.session.run(None, {self.input_name: blob})
